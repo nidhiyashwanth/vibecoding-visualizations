@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Harmonic Oscillator Visualization</title>
+
+    <!-- CSS embedded directly -->
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            padding: 10px;
+            min-height: 100vh; /* Ensure body takes full height */
+            box-sizing: border-box;
+        }
+
+        .main-container {
+            display: flex;
+            flex-wrap: wrap; /* Allow wrapping on smaller screens */
+            justify-content: center;
+            width: 100%;
+            max-width: 1400px; /* Limit overall width */
+            gap: 20px; /* Space between columns */
+        }
+
+        .simulation-column {
+            flex: 2; /* Takes more space */
+            min-width: 450px; /* Minimum width for 3D view */
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .plots-column {
+            flex: 1; /* Takes less space */
+            min-width: 300px; /* Minimum width for plots */
+            display: flex;
+            flex-direction: column;
+            gap: 15px; /* Space between plots */
+        }
+
+        h1 {
+            text-align: center;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+
+        .info, .math-explanation {
+            background-color: #e9e9e9;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+            width: 95%;
+            max-width: 600px; /* Limit width of info boxes */
+            box-sizing: border-box;
+            text-align: center;
+            align-self: center; /* Center within the column */
+        }
+
+        .math-explanation p {
+             margin: 5px 0;
+             font-family: monospace;
+             text-align: left; /* Align math left */
+        }
+        .math-explanation span {
+            font-style: italic;
+            font-family: serif;
+        }
+
+
+        #visualization-container {
+            width: 100%; /* Full width of its column */
+            height: 45vh; /* Relative height */
+            min-height: 300px;
+            border: 1px solid #ccc;
+            background-color: #ffffff;
+            margin-bottom: 15px; /* Space below 3D view */
+        }
+
+        .plot-container {
+            border: 1px solid #ccc;
+            background-color: #ffffff;
+            width: 100%; /* Full width of its column */
+            box-sizing: border-box;
+        }
+        .plot-container h3 {
+            text-align: center;
+            margin: 5px 0;
+            font-size: 1em;
+        }
+        .plot-canvas {
+            display: block; /* Remove extra space below canvas */
+            width: 100%;
+            height: 18vh; /* Relative height */
+            min-height: 150px;
+        }
+
+
+        .controls {
+            margin-top: 10px;
+            padding: 15px;
+            background-color: #e0e0e0;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            width: 95%;
+            max-width: 600px; /* Limit width */
+            box-sizing: border-box;
+            align-self: center; /* Center within the column */
+        }
+
+        .controls div {
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap; /* Allow wrapping inside controls */
+        }
+
+        .controls label {
+            min-width: 180px; /* Align sliders */
+            padding-right: 5px;
+        }
+
+        .controls input[type="range"] {
+            flex-grow: 1; /* Allow slider to take space */
+            min-width: 150px;
+            margin-right: 10px;
+        }
+
+        .controls span {
+            font-weight: bold;
+            min-width: 45px; /* Space for value display */
+            text-align: right;
+            padding-right: 5px;
+        }
+
+        .animation-controls button {
+            padding: 8px 15px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            background-color: #0077ff;
+            color: white;
+            font-size: 0.9em;
+        }
+        .animation-controls button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+    </style>
+
+    <!-- Import Three.js -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.161.0/build/three.module.js"
+            }
+        }
+    </script>
+
+</head>
+<body>
+    <h1>Enhanced Simple Harmonic Oscillator</h1>
+
+    <div class="main-container">
+
+        <div class="simulation-column">
+            <!-- Math Explanation -->
+            <div class="math-explanation">
+                <p>Position: <span>x</span>(<span>t</span>) = <span>A</span> cos(<span>ωt</span> + <span>φ</span>)</p>
+                <p>Velocity: <span>v</span>(<span>t</span>) = d<span>x</span>/d<span>t</span> = -<span>Aω</span> sin(<span>ωt</span> + <span>φ</span>)</p>
+                <p>Where:</p>
+                <p><span>A</span> = Amplitude (Max displacement)</p>
+                <p><span>ω</span> = Angular Frequency (rad/s)</p>
+                <p><span>φ</span> = Phase Angle (Initial offset)</p>
+                <p><span>t</span> = Time</p>
+            </div>
+
+            <!-- 3D Visualization -->
+            <div id="visualization-container"></div>
+
+            <!-- Controls -->
+            <div class="controls">
+                <div>
+                    <label for="amplitudeSlider">Amplitude (A):</label>
+                    <input type="range" id="amplitudeSlider" min="0.1" max="5" step="0.1" value="2">
+                    <span id="amplitudeValue">2.0</span>
+                </div>
+                <div>
+                    <label for="frequencySlider">Angular Frequency (ω):</label>
+                    <input type="range" id="frequencySlider" min="0.1" max="10" step="0.1" value="1.5">
+                    <span id="frequencyValue">1.5</span> rad/s
+                </div>
+                <div>
+                    <label for="phaseSlider">Phase Angle (φ):</label>
+                    <input type="range" id="phaseSlider" min="-3.14" max="3.14" step="0.01" value="0">
+                    <span id="phaseValue">0.00</span> rad
+                </div>
+                <div class="animation-controls">
+                    <button id="pauseButton">Pause</button>
+                    <button id="resumeButton" disabled>Resume</button>
+                    <button id="resetButton">Reset Time</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="plots-column">
+            <!-- Wave Plot -->
+            <div class="plot-container">
+                <h3>Position vs. Time</h3>
+                <canvas id="wavePlotCanvas" class="plot-canvas"></canvas>
+            </div>
+
+            <!-- Phase Space Plot -->
+            <div class="plot-container">
+                <h3>Phase Space (Velocity vs. Position)</h3>
+                <canvas id="phaseSpaceCanvas" class="plot-canvas"></canvas>
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- JavaScript embedded directly -->
+    <script type="module">
+        import * as THREE from 'three';
+
+        // --- Get DOM Elements ---
+        const container = document.getElementById('visualization-container');
+        const amplitudeSlider = document.getElementById('amplitudeSlider');
+        const amplitudeValueSpan = document.getElementById('amplitudeValue');
+        const frequencySlider = document.getElementById('frequencySlider');
+        const frequencyValueSpan = document.getElementById('frequencyValue');
+        const phaseSlider = document.getElementById('phaseSlider');
+        const phaseValueSpan = document.getElementById('phaseValue');
+        const pauseButton = document.getElementById('pauseButton');
+        const resumeButton = document.getElementById('resumeButton');
+        const resetButton = document.getElementById('resetButton');
+        const wavePlotCanvas = document.getElementById('wavePlotCanvas');
+        const phaseSpaceCanvas = document.getElementById('phaseSpaceCanvas');
+        const wavePlotCtx = wavePlotCanvas.getContext('2d');
+        const phaseSpaceCtx = phaseSpaceCanvas.getContext('2d');
+
+
+        // --- Global Variables ---
+        let amplitude = parseFloat(amplitudeSlider.value);
+        let angularFrequency = parseFloat(frequencySlider.value);
+        let phase = parseFloat(phaseSlider.value);
+        let isPaused = false;
+        let animationFrameId = null; // To store the request ID
+        const clock = new THREE.Clock();
+        let timeOffset = 0; // To handle pausing correctly with getElapsedTime
+
+        // Plotting history
+        const waveHistory = [];
+        const maxWaveHistorySeconds = 10; // Show last 10 seconds
+        let maxAmplitudeEver = amplitude; // Track max amplitude for plot scaling
+
+        // --- Basic Three.js Setup ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0xffffff); // White background
+        const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000); // Aspect ratio set later
+        camera.position.set(0, 2, 8); // Move camera back and slightly up
+        camera.lookAt(0, 0, 0);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        container.appendChild(renderer.domElement);
+
+        // --- Lighting ---
+        const ambientLight = new THREE.AmbientLight(0x404040, 2.5); // Increased intensity
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5); // Increased intensity
+        directionalLight.position.set(5, 10, 7.5);
+        scene.add(directionalLight);
+
+        // --- Oscillator Object ---
+        const geometry = new THREE.SphereGeometry(0.5, 32, 32);
+        const material = new THREE.MeshStandardMaterial({ color: 0x0077ff, metalness: 0.3, roughness: 0.5 }); // Nicer material
+        const oscillatorMesh = new THREE.Mesh(geometry, material);
+        scene.add(oscillatorMesh);
+
+        // --- Equilibrium Line ---
+        const eqLineMaterial = new THREE.LineBasicMaterial({ color: 0xaaaaaa });
+        const eqPoints = [new THREE.Vector3(-10, 0, 0), new THREE.Vector3(10, 0, 0)];
+        const eqLineGeometry = new THREE.BufferGeometry().setFromPoints(eqPoints);
+        const equilibriumLine = new THREE.Line(eqLineGeometry, eqLineMaterial);
+        scene.add(equilibriumLine);
+
+        // --- Spring Visualization ---
+        const springMaterial = new THREE.LineBasicMaterial({ color: 0xff0000 }); // Red spring
+        const springPoints = [new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, 0, 0)]; // Start and end points
+        const springGeometry = new THREE.BufferGeometry().setFromPoints(springPoints);
+        const springLine = new THREE.Line(springGeometry, springMaterial);
+        scene.add(springLine);
+
+        // --- Initial UI Update ---
+        function updateUIValues() {
+            amplitudeValueSpan.textContent = amplitude.toFixed(1);
+            frequencyValueSpan.textContent = angularFrequency.toFixed(1);
+            phaseValueSpan.textContent = phase.toFixed(2);
+            maxAmplitudeEver = Math.max(maxAmplitudeEver, amplitude); // Update max amplitude for scaling
+        }
+        updateUIValues();
+
+
+        // --- Event Listeners ---
+        amplitudeSlider.addEventListener('input', (event) => {
+            amplitude = parseFloat(event.target.value);
+            updateUIValues();
+            // Don't reset history here, let plots adapt
+        });
+
+        frequencySlider.addEventListener('input', (event) => {
+            angularFrequency = parseFloat(event.target.value);
+            updateUIValues();
+             // Clear history on frequency change as the pattern changes completely
+            waveHistory.length = 0;
+        });
+
+        phaseSlider.addEventListener('input', (event) => {
+            phase = parseFloat(event.target.value);
+            updateUIValues();
+            // Clear history on phase change as the pattern shifts
+            waveHistory.length = 0;
+        });
+
+        pauseButton.addEventListener('click', () => {
+            if (!isPaused) {
+                isPaused = true;
+                pauseButton.disabled = true;
+                resumeButton.disabled = false;
+                timeOffset = clock.getElapsedTime(); // Store time when paused
+                clock.stop();
+                cancelAnimationFrame(animationFrameId); // Stop the loop
+                console.log("Paused");
+            }
+        });
+
+        resumeButton.addEventListener('click', () => {
+            if (isPaused) {
+                isPaused = false;
+                pauseButton.disabled = false;
+                resumeButton.disabled = true;
+                clock.start(); // Restart the clock
+                animate(); // Restart the loop
+                console.log("Resumed");
+            }
+        });
+
+        resetButton.addEventListener('click', () => {
+            clock.stop(); // Stop clock
+            timeOffset = 0; // Reset time offset
+            clock.start(); // Start clock from 0
+            waveHistory.length = 0; // Clear wave history
+            phaseSpaceCtx.clearRect(0, 0, phaseSpaceCanvas.width, phaseSpaceCanvas.height); // Clear phase plot immediately
+             if (isPaused) { // If paused, stay paused but reset
+                console.log("Time Reset (while paused)");
+            } else { // If running, restart animation loop immediately
+                isPaused = false;
+                pauseButton.disabled = false;
+                resumeButton.disabled = true;
+                cancelAnimationFrame(animationFrameId); // Cancel any existing frame
+                animate();
+                console.log("Time Reset and Restarted");
+            }
+        });
+
+
+        // --- Window Resize Handler ---
+        function onWindowResize() {
+            // 3D Viewport
+            if (container.clientWidth > 0 && container.clientHeight > 0) {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            }
+            // 2D Canvases - Resize canvas element itself for resolution
+             const canvases = [wavePlotCanvas, phaseSpaceCanvas];
+             canvases.forEach(canvas => {
+                 if (canvas.parentElement.clientWidth > 0 && canvas.parentElement.clientHeight > 0) {
+                     // Set internal resolution based on displayed size
+                     canvas.width = canvas.clientWidth;
+                     canvas.height = canvas.clientHeight;
+                 }
+             });
+
+            // Force redraw plots after resize (optional, happens on next frame anyway)
+             // drawWavePlot();
+             // drawPhaseSpacePlot(oscillatorMesh.position.x); // Need current x
+        }
+        window.addEventListener('resize', onWindowResize);
+        // Call once initially to set sizes
+         setTimeout(onWindowResize, 50); // Delay slightly for layout stabilization
+
+
+        // --- Plotting Functions ---
+
+        function drawWavePlot() {
+            const w = wavePlotCanvas.width;
+            const h = wavePlotCanvas.height;
+            const ctx = wavePlotCtx;
+
+            ctx.clearRect(0, 0, w, h);
+            ctx.fillStyle = "#ffffff"; // Ensure white background if CSS fails
+            ctx.fillRect(0, 0, w, h);
+
+            // Determine time range
+            const currentTime = clock.getElapsedTime() + timeOffset;
+            const startTime = Math.max(0, currentTime - maxWaveHistorySeconds);
+            const timeSpan = currentTime - startTime;
+
+            // Scaling factors
+            const timeScale = w / timeSpan;
+             // Scale based on max amplitude seen OR current amplitude + buffer, whichever larger
+            const plotAmplitude = Math.max(1, maxAmplitudeEver) * 1.1; // Add 10% buffer, min height 1
+            const posScale = h / (2 * plotAmplitude);
+            const yOffset = h / 2;
+
+            // Draw Axes
+            ctx.strokeStyle = "#cccccc";
+            ctx.lineWidth = 1;
+            // Time Axis (center horizontal)
+            ctx.beginPath();
+            ctx.moveTo(0, yOffset);
+            ctx.lineTo(w, yOffset);
+            ctx.stroke();
+            // Position Axis (center vertical - usually 0 time)
+            // Only draw if 0 time is visible
+            if (startTime <= 0) {
+                const zeroTimeX = (0 - startTime) * timeScale;
+                ctx.beginPath();
+                ctx.moveTo(zeroTimeX, 0);
+                ctx.lineTo(zeroTimeX, h);
+                ctx.stroke();
+            }
+
+             // Draw Amplitude bounds
+            ctx.strokeStyle = "#ffcccc"; // Light red for bounds
+            ctx.setLineDash([5, 5]);
+            const topBoundY = yOffset - amplitude * posScale;
+            const bottomBoundY = yOffset + amplitude * posScale;
+            ctx.beginPath();
+            ctx.moveTo(0, topBoundY); ctx.lineTo(w, topBoundY);
+            ctx.moveTo(0, bottomBoundY); ctx.lineTo(w, bottomBoundY);
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset line dash
+
+            // Draw Wave
+            ctx.strokeStyle = "#0077ff";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            let firstPoint = true;
+            for (let i = 0; i < waveHistory.length; i++) {
+                const point = waveHistory[i];
+                if (point.t >= startTime) { // Only draw points within the visible time window
+                    const xPos = (point.t - startTime) * timeScale;
+                    const yPos = yOffset - point.x * posScale; // Invert y-axis for canvas coords
+                    if (firstPoint) {
+                        ctx.moveTo(xPos, yPos);
+                        firstPoint = false;
+                    } else {
+                        ctx.lineTo(xPos, yPos);
+                    }
+                }
+            }
+            ctx.stroke();
+
+            // Draw Time Labels (optional)
+            ctx.fillStyle = "#555555";
+            ctx.font = "10px sans-serif";
+            ctx.textAlign = "right";
+            ctx.fillText(currentTime.toFixed(1) + "s", w - 5, h - 5);
+            ctx.textAlign = "left";
+             ctx.fillText(startTime.toFixed(1) + "s", 5, h - 5);
+
+             // Draw Amplitude Labels
+            ctx.fillText("+" + amplitude.toFixed(1), w - 5, topBoundY - 2);
+            ctx.fillText("-" + amplitude.toFixed(1), w - 5, bottomBoundY + 10);
+
+        }
+
+        function drawPhaseSpacePlot(currentX, currentV) {
+            const w = phaseSpaceCanvas.width;
+            const h = phaseSpaceCanvas.height;
+            const ctx = phaseSpaceCtx;
+
+            // Scaling factors - needs max values of x and v
+            const maxPos = Math.max(1, maxAmplitudeEver) * 1.1; // Max x is Amplitude (with buffer)
+            const maxVel = Math.max(1, maxAmplitudeEver * angularFrequency) * 1.1; // Max v is A*omega (with buffer)
+
+            const xScale = w / (2 * maxPos);
+            const yScale = h / (2 * maxVel);
+            const xOffset = w / 2;
+            const yOffset = h / 2;
+
+            // --- Drawing ---
+            // Clear only a small area around the previous point for a trailing effect (optional, more complex)
+            // OR clear the whole canvas each frame (simpler)
+             ctx.fillStyle = "rgba(255, 255, 255, 0.1)"; // Slightly transparent white for trails
+             ctx.fillRect(0, 0, w, h); // Fade previous points slightly
+
+            // Draw Axes
+            ctx.strokeStyle = "#cccccc";
+            ctx.lineWidth = 1;
+            // Position Axis (Horizontal)
+            ctx.beginPath();
+            ctx.moveTo(0, yOffset);
+            ctx.lineTo(w, yOffset);
+            ctx.stroke();
+            // Velocity Axis (Vertical)
+            ctx.beginPath();
+            ctx.moveTo(xOffset, 0);
+            ctx.lineTo(xOffset, h);
+            ctx.stroke();
+
+            // Draw current point
+            const plotX = xOffset + currentX * xScale;
+            const plotY = yOffset - currentV * yScale; // Invert y-axis for canvas coords
+
+            ctx.fillStyle = "#ff0000"; // Red dot for current state
+            ctx.beginPath();
+            ctx.arc(plotX, plotY, 3, 0, 2 * Math.PI); // Draw a small circle
+            ctx.fill();
+
+             // Draw Axis Labels (optional)
+            ctx.fillStyle = "#555555";
+            ctx.font = "10px sans-serif";
+            ctx.textAlign = "right";
+            ctx.fillText("v", xOffset - 5, 10); // Top
+             ctx.fillText("x", w - 5 , yOffset - 5); // Right
+            ctx.fillText("+" + maxPos.toFixed(1), w - 5, yOffset + 10);
+             ctx.fillText("-" + maxPos.toFixed(1), 5, yOffset + 10);
+             ctx.textAlign = "left";
+             ctx.fillText("+" + maxVel.toFixed(1), xOffset + 5, 10);
+             ctx.fillText("-" + maxVel.toFixed(1), xOffset + 5, h-5);
+        }
+
+        // --- Animation Loop ---
+        function animate() {
+            if (isPaused) return; // Don't do anything if paused
+
+            animationFrameId = requestAnimationFrame(animate); // Loop animation
+
+            const elapsedTime = clock.getElapsedTime() + timeOffset; // Correct time including pauses
+
+            // Calculate position and velocity using SHO equations
+            const angle = angularFrequency * elapsedTime + phase;
+            const xPosition = amplitude * Math.cos(angle);
+            const velocity = -amplitude * angularFrequency * Math.sin(angle);
+
+            // Update the 3D mesh position
+            oscillatorMesh.position.x = xPosition;
+
+            // Update the spring visualization
+            const springPositions = springLine.geometry.attributes.position;
+            springPositions.setX(1, xPosition); // Set end point x
+            springPositions.needsUpdate = true; // Tell Three.js to update the buffer
+
+            // --- Update History for Plots ---
+            // Wave Plot History
+            waveHistory.push({ t: elapsedTime, x: xPosition });
+            // Prune old history (based on time)
+            const cutoffTime = elapsedTime - maxWaveHistorySeconds - 1; // Keep slightly more than needed
+             // Find the index of the first element to keep
+            let pruneIndex = 0;
+            while(pruneIndex < waveHistory.length && waveHistory[pruneIndex].t < cutoffTime) {
+                pruneIndex++;
+            }
+            if (pruneIndex > 0) {
+                 waveHistory.splice(0, pruneIndex); // Remove old elements efficiently
+            }
+
+
+            // --- Draw Plots ---
+            if(wavePlotCanvas.width > 0) drawWavePlot();
+            if(phaseSpaceCanvas.width > 0) drawPhaseSpacePlot(xPosition, velocity);
+
+            // Render the 3D scene
+            renderer.render(scene, camera);
+        }
+
+        // --- Initial Setup ---
+        onWindowResize(); // Call once to set initial sizes correctly
+        animate(); // Start the animation loop
+
+    </script>
+</body>
+</html>
