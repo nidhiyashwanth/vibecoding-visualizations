@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stunning Solenoid Visualization - Custom Controls (Fixed)</title>
+    <style>
+        /* CSS remains the same as the previous version */
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #0a0a0a; color: #e0e0e0; }
+        #container { width: 100vw; height: 100vh; display: block; }
+        #info { position: absolute; top: 15px; left: 15px; background-color: rgba(20, 20, 30, 0.85); padding: 20px; border-radius: 8px; border: 1px solid rgba(100, 100, 150, 0.5); color: #e0e0e0; max-width: 380px; font-size: 0.95em; line-height: 1.6; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); max-height: calc(100vh - 40px); overflow-y: auto; z-index: 10; }
+        #info h2 { margin-top: 0; margin-bottom: 15px; color: #66ccff; border-bottom: 1px solid #66ccff; padding-bottom: 5px; font-weight: 600; }
+        #info h3 { color: #99ddff; margin-top: 20px; margin-bottom: 10px; font-size: 1.1em; font-weight: 500; }
+        #info p { margin: 8px 0; }
+        #info .formula-block { background-color: rgba(0, 0, 0, 0.3); padding: 15px; margin: 15px 0; border-radius: 4px; border-left: 3px solid #ffcc00; }
+        #info .formula { font-family: 'Consolas', 'Courier New', Courier, monospace; font-size: 1.2em; color: #ffcc00; text-align: center; margin-bottom: 10px; }
+        #info .formula-inline { font-family: 'Consolas', 'Courier New', Courier, monospace; color: #ffcc00; background-color: rgba(50,50,50,0.7); padding: 2px 5px; border-radius: 3px; font-size: 1.05em; }
+        #info .definition { margin-left: 15px; font-size: 0.9em; }
+        #info .symbol { font-weight: bold; color: #66ff99; font-family: 'Consolas', 'Courier New', Courier, monospace; display: inline-block; min-width: 25px; }
+        #info .unit { color: #aaa; font-style: italic; }
+        #info .calculated-value { font-weight: bold; color: #66ccff; font-size: 1.2em; font-family: 'Consolas', 'Courier New', Courier, monospace; }
+        #info .note { font-size: 0.85em; color: #aaa; font-style: italic; margin-top: 15px; border-top: 1px dashed #555; padding-top: 10px; }
+
+        #controls-panel { position: absolute; top: 15px; right: 15px; width: 320px; background-color: rgba(35, 35, 45, 0.9); border-radius: 8px; border: 1px solid rgba(100, 100, 150, 0.5); padding: 15px 20px; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); color: #e0e0e0; font-size: 13px; max-height: calc(100vh - 30px); overflow-y: auto; overflow-x: hidden; z-index: 11; }
+        #controls-panel::-webkit-scrollbar { width: 6px; }
+        #controls-panel::-webkit-scrollbar-track { background: transparent; }
+        #controls-panel::-webkit-scrollbar-thumb { background-color: rgba(120, 120, 150, 0.5); border-radius: 10px; }
+        #controls-panel h3 { color: #66ccff; margin-top: 10px; margin-bottom: 15px; padding-bottom: 5px; border-bottom: 1px solid #556; font-size: 1.1em; font-weight: 600; }
+        #controls-panel h3:first-of-type { margin-top: 0; }
+        #controls-panel h4 { color: #99ddff; margin-top: 15px; margin-bottom: 10px; font-size: 1.0em; font-weight: 500; } /* Style for subheadings */
+        .control-group { margin-bottom: 12px; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; }
+        .control-group label { flex-basis: 120px; margin-right: 10px; color: #bbb; white-space: nowrap; }
+        .control-group input[type="range"] { flex-grow: 1; height: 5px; cursor: pointer; background: #555; border-radius: 5px; accent-color: #66ccff; margin-right: 10px; }
+        .control-group input[type="number"] { width: 60px; background-color: #2a2a3a; border: 1px solid #556; color: #66ff99; border-radius: 3px; padding: 3px 5px; font-size: 12px; text-align: right; -moz-appearance: textfield; }
+        .control-group input[type="number"]::-webkit-outer-spin-button, .control-group input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        .control-group .value-display { color: #66ff99; font-family: 'Consolas', monospace; min-width: 40px; text-align: right; }
+        .control-group input[type="checkbox"] { accent-color: #66ccff; cursor: pointer; order: 2; margin-left: auto; }
+        .control-group label.checkbox-label { flex-basis: auto; flex-grow: 1; margin-right: 0; }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+
+    <div id="info">
+        <!-- Info content remains the same -->
+        <h2>Solenoid Electromagnetism</h2>
+        <p>A solenoid is a coil of wire that generates a controlled magnetic field when an electric current passes through it.</p>
+        <h3>Magnetic Field Inside</h3>
+        <p>The magnetic field (<span class="formula-inline">B</span>) inside a long, ideal solenoid is strong, uniform, and parallel to its axis.</p>
+        <div class="formula-block">
+            <div class="formula">B ≈ μ₀ * n * I</div>
+            <p class="definition"><span class="symbol">B</span> = Magnetic Field Strength <span class="unit">(Tesla, T)</span></p>
+            <p class="definition"><span class="symbol">μ₀</span> = Permeability of Free Space <br><span style="margin-left: 30px;">(≈ 1.2566 x 10⁻⁶ T·m/A)</span></p>
+            <p class="definition"><span class="symbol">n</span> = Turn Density (N / L) <span class="unit">(turns/meter)</span></p>
+            <p class="definition"><span class="symbol">N</span> = Total Number of Turns</p>
+            <p class="definition"><span class="symbol">L</span> = Length of Solenoid <span class="unit">(meters, m)</span></p>
+            <p class="definition"><span class="symbol">I</span> = Electric Current <span class="unit">(Amperes, A)</span></p>
+        </div>
+        <h3>Calculated Field Strength (B)</h3>
+        <p style="text-align: center;">
+            <span id="b_field_value" class="calculated-value">...</span> <span class="unit">Tesla</span>
+        </p>
+        <p class="note">
+            Use the controls panel to change parameters.
+            Visualization is qualitative: field lines show general shape, particles indicate conventional current (+) direction in the wire and the resulting magnetic field direction. Electrons flow opposite to wire particles. Calculation assumes an ideal (infinitely long) solenoid.
+        </p>
+    </div>
+
+    <!-- Custom Controls Panel HTML (Same as before) -->
+    <div id="controls-panel">
+        <h3>Solenoid Controls</h3>
+        <div class="control-group"> <label for="current">Current (I) [A]:</label> <input type="range" id="current" name="current" min="-5.0" max="5.0" step="0.1"> <span class="value-display" id="current-value"></span> </div>
+        <div class="control-group"> <label for="numTurns">Turns (N):</label> <input type="range" id="numTurns" name="numTurns" min="5" max="150" step="1"> <span class="value-display" id="numTurns-value"></span> </div>
+        <div class="control-group"> <label for="length">Length (L) [m]:</label> <input type="range" id="length" name="length" min="1" max="25" step="0.1"> <span class="value-display" id="length-value"></span> </div>
+        <div class="control-group"> <label for="radius">Radius (R) [m]:</label> <input type="range" id="radius" name="radius" min="0.5" max="8" step="0.1"> <span class="value-display" id="radius-value"></span> </div>
+        <h3>Visualization Controls</h3>
+        <div class="control-group"> <label for="fieldLineDensity">Line Density:</label> <input type="range" id="fieldLineDensity" name="fieldLineDensity" min="0.1" max="4.0" step="0.1"> <span class="value-display" id="fieldLineDensity-value"></span> </div>
+        <div class="control-group"> <label for="showInsideLines" class="checkbox-label">Show Inside Lines:</label> <input type="checkbox" id="showInsideLines" name="showInsideLines"> </div>
+        <div class="control-group"> <label for="showOutsideLines" class="checkbox-label">Show Outside Lines:</label> <input type="checkbox" id="showOutsideLines" name="showOutsideLines"> </div>
+        <h4>Particle Animation</h4>
+        <div class="control-group"> <label for="particleSpeed">Particle Speed:</label> <input type="range" id="particleSpeed" name="particleSpeed" min="0.05" max="1.5" step="0.01"> <span class="value-display" id="particleSpeed-value"></span> </div>
+        <div class="control-group"> <label for="showWireParticles" class="checkbox-label">Show Wire Particles:</label> <input type="checkbox" id="showWireParticles" name="showWireParticles"> </div>
+        <div class="control-group"> <label for="numWireParticles">Wire Particle Count:</label> <input type="range" id="numWireParticles" name="numWireParticles" min="0" max="300" step="5"> <span class="value-display" id="numWireParticles-value"></span> </div>
+        <div class="control-group"> <label for="showFieldParticles" class="checkbox-label">Show Field Particles:</label> <input type="checkbox" id="showFieldParticles" name="showFieldParticles"> </div>
+        <div class="control-group"> <label for="numFieldParticles">Field Particle Count:</label> <input type="range" id="numFieldParticles" name="numFieldParticles" min="0" max="400" step="5"> <span class="value-display" id="numFieldParticles-value"></span> </div>
+        <h4>Visual Effects (Bloom)</h4>
+        <div class="control-group"> <label for="bloomEnabled" class="checkbox-label">Enable Bloom:</label> <input type="checkbox" id="bloomEnabled" name="bloomEnabled"> </div>
+        <div class="control-group"> <label for="bloomStrength">Bloom Strength:</label> <input type="range" id="bloomStrength" name="bloomStrength" min="0.0" max="2.0" step="0.05"> <span class="value-display" id="bloomStrength-value"></span> </div>
+        <div class="control-group"> <label for="bloomRadius">Bloom Radius:</label> <input type="range" id="bloomRadius" name="bloomRadius" min="0.0" max="1.5" step="0.05"> <span class="value-display" id="bloomRadius-value"></span> </div>
+        <div class="control-group"> <label for="bloomThreshold">Bloom Threshold:</label> <input type="range" id="bloomThreshold" name="bloomThreshold" min="0.0" max="1.0" step="0.01"> <span class="value-display" id="bloomThreshold-value"></span> </div>
+    </div>
+
+    <!-- Import maps (Same as before) -->
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+        import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+        import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+        import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+        // --- Constants (Same as before) ---
+        const MU_0 = 4 * Math.PI * 1e-7;
+        const WIRE_THICKNESS = 0.05;
+        const FIELD_LINE_COLOR_INSIDE = 0x00ff88;
+        const FIELD_LINE_COLOR_OUTSIDE = 0xffaa00;
+        const ARROW_COLOR = 0xffffff;
+        const WIRE_PARTICLE_COLOR = 0xffff00;
+        const FIELD_PARTICLE_COLOR = 0x00aaff;
+
+        // --- Global Variables (Same as before) ---
+        let scene, camera, renderer, controls, clock, composer;
+        let solenoidGroup, fieldLinesGroup;
+        const particles = [];
+        let bloomPass;
+
+        const params = {
+            // Default values remain the same
+            current: 1.5, numTurns: 25, length: 6.0, radius: 1.2,
+            showInsideLines: true, showOutsideLines: true, fieldLineDensity: 1.2,
+            showWireParticles: true, showFieldParticles: true, particleSpeed: 0.35,
+            numWireParticles: 60, numFieldParticles: 90,
+            bloomEnabled: true, bloomStrength: 0.6, bloomRadius: 0.5, bloomThreshold: 0.1,
+        };
+
+        // --- Initialization (Same as before) ---
+        function init() {
+            clock = new THREE.Clock();
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0a0a0a);
+            scene.fog = new THREE.FogExp2(0x0a0a0a, 0.03);
+
+            camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(params.radius * 0.5, params.radius * 2.5, params.length * 1.3);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.toneMapping = THREE.ReinhardToneMapping;
+            renderer.toneMappingExposure = 1.0;
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            // Lighting (Same)
+            scene.add(new THREE.AmbientLight(0x404060, 0.5));
+            const hemiLight = new THREE.HemisphereLight(0x88aaff, 0x446688, 0.8);
+            hemiLight.position.set(0, 20, 0); scene.add(hemiLight);
+            const dirLight1 = new THREE.DirectionalLight(0xffffff, 1.2);
+            dirLight1.position.set(8, 15, 10); dirLight1.castShadow = true; scene.add(dirLight1);
+            const dirLight2 = new THREE.DirectionalLight(0xaaaaff, 0.5);
+            dirLight2.position.set(-8, -5, -10); scene.add(dirLight2);
+
+            // Controls (Same)
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true; controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false; controls.minDistance = 1;
+            controls.maxDistance = 60; controls.target.set(0, 0, 0);
+
+            // Post Processing (Same)
+            composer = new EffectComposer(renderer);
+            const renderPass = new RenderPass(scene, camera); composer.addPass(renderPass);
+            bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight),
+                params.bloomStrength, params.bloomRadius, params.bloomThreshold);
+            composer.addPass(bloomPass); bloomPass.enabled = params.bloomEnabled;
+
+            // Groups (Ensure they are created and added to scene)
+            solenoidGroup = new THREE.Group();
+            scene.add(solenoidGroup); // Add group to scene
+            fieldLinesGroup = new THREE.Group();
+            scene.add(fieldLinesGroup); // Add group to scene
+
+            // Initial Creation
+            createVisualization(); // Create and add objects to the groups
+            setupCustomControls();
+            updateMathDisplay();
+
+            window.addEventListener('resize', onWindowResize, false);
+            animate();
+        }
+
+        // --- Geometry Creation ---
+
+        // Custom Helix Curve (remains the same)
+        class HelixCurve extends THREE.Curve {
+             constructor(radius = 1, length = 5, numTurns = 10) { super(); this.radius = radius; this.length = length; this.numTurns = numTurns; }
+            getPoint(t, optionalTarget = new THREE.Vector3()) {
+                const turns = this.numTurns; const totalAngle = 2 * Math.PI * turns * Math.sign(params.current);
+                const z = (t * this.length) - this.length / 2; const angle = t * totalAngle;
+                const x = this.radius * Math.cos(angle); const y = this.radius * Math.sin(angle);
+                return optionalTarget.set(x, y, z);
+            }
+        }
+
+        // Create Solenoid Mesh and Particles
+        function createSolenoid(group) {
+            // console.log("Creating Solenoid..."); // Debug log
+            const curve = new HelixCurve(params.radius, params.length, params.numTurns);
+            const tubeGeometry = new THREE.TubeGeometry(curve, params.numTurns * 25, WIRE_THICKNESS, 10, false);
+            const material = new THREE.MeshStandardMaterial({ color: 0xb87333, metalness: 0.7, roughness: 0.4 });
+            const solenoidMesh = new THREE.Mesh(tubeGeometry, material);
+            group.add(solenoidMesh); // Add mesh to the provided group
+
+            // Wire Particles
+            if (params.showWireParticles) {
+                const particleGeo = new THREE.SphereGeometry(WIRE_THICKNESS * 1.6, 8, 6);
+                const particleMat = new THREE.MeshStandardMaterial({ color: WIRE_PARTICLE_COLOR, emissive: WIRE_PARTICLE_COLOR, emissiveIntensity: 1.5, metalness: 0.1, roughness: 0.5 });
+                for (let i = 0; i < params.numWireParticles; i++) {
+                    const particle = new THREE.Mesh(particleGeo, particleMat);
+                    const startT = Math.random();
+                    // Ensure curve.getPointAt exists and works
+                    if (curve && curve.getPointAt) {
+                         particle.position.copy(curve.getPointAt(startT));
+                         group.add(particle); // Add particle to the provided group
+                         particles.push({ mesh: particle, curve: curve, t: startT, speedFactor: 1.0 });
+                    } else {
+                        console.error("Helix curve or getPointAt method is invalid during particle creation.");
+                    }
+                }
+            }
+            return curve;
+        }
+
+        // Create Field Lines and Particles
+        function createFieldLines(group) {
+            // console.log("Creating Field Lines..."); // Debug log
+            const numInsideLines = Math.max(0, Math.round(8 * params.fieldLineDensity));
+            const numOutsideLoops = Math.max(0, Math.round(6 * params.fieldLineDensity));
+            const halfLength = params.length / 2;
+            const currentSign = Math.sign(params.current);
+
+            const fieldParticleGeo = new THREE.SphereGeometry(WIRE_THICKNESS * 1.2, 8, 6);
+            const fieldParticleMat = new THREE.MeshStandardMaterial({ color: FIELD_PARTICLE_COLOR, emissive: FIELD_PARTICLE_COLOR, emissiveIntensity: 1.5, metalness: 0.1, roughness: 0.5 });
+
+            // --- Inside Field Lines ---
+            if (params.showInsideLines) {
+                const lineMaterial = new THREE.LineBasicMaterial({ color: FIELD_LINE_COLOR_INSIDE, linewidth: 1.5 });
+                const lineRadiusStep = params.radius * 0.8 / Math.max(1, numInsideLines / 2);
+
+                // Loop for radial lines
+                for (let i = 0; i < numInsideLines; i++) {
+                    const r = (i % Math.ceil(numInsideLines / 2)) * lineRadiusStep + lineRadiusStep * 0.5;
+                    const angle = (i < numInsideLines / 2) ? 0 : Math.PI;
+                    if (r < params.radius) {
+                        const startX = r * Math.cos(angle); const startY = r * Math.sin(angle);
+                        const startVec = new THREE.Vector3(startX, startY, -halfLength * 1.1);
+                        const endVec = new THREE.Vector3(startX, startY, halfLength * 1.1);
+                        const points = [startVec, endVec];
+                        const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                        const line = new THREE.Line(geometry, lineMaterial);
+                        group.add(line); // Add line to the provided group
+                        const lineCurve = new THREE.LineCurve3(startVec, endVec);
+                        const arrowDir = new THREE.Vector3(0, 0, currentSign);
+                        const arrowPos = new THREE.Vector3(startX, startY, halfLength * 0.8 * currentSign);
+                        const arrowHelper = new THREE.ArrowHelper(arrowDir, arrowPos, 0.6, ARROW_COLOR, 0.25, 0.2);
+                        group.add(arrowHelper); // Add arrow to the provided group
+
+                        if (params.showFieldParticles) {
+                            const numParticlesThisLine = Math.max(1, Math.round(params.numFieldParticles / (numInsideLines + numOutsideLoops * 4 + 1)));
+                            for (let j = 0; j < numParticlesThisLine; j++) {
+                                const particle = new THREE.Mesh(fieldParticleGeo.clone(), fieldParticleMat.clone()); // Clone geo/mat
+                                const startT = Math.random();
+                                particle.position.copy(lineCurve.getPointAt(startT));
+                                group.add(particle); // Add particle to the provided group
+                                particles.push({ mesh: particle, curve: lineCurve, t: startT, speedFactor: 0.8, direction: currentSign });
+                            }
+                        }
+                    }
+                }
+                // Central line (always add if inside lines are shown)
+                if (numInsideLines >= 0 || params.showInsideLines) { // Ensure central line is added if checkbox is true, even if density is 0
+                     const startVec = new THREE.Vector3(0, 0, -halfLength * 1.1); const endVec = new THREE.Vector3(0, 0, halfLength * 1.1);
+                     const points = [startVec, endVec]; const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                     const line = new THREE.Line(geometry, lineMaterial);
+                     group.add(line); // Add line to the provided group
+                     const lineCurve = new THREE.LineCurve3(startVec, endVec);
+                     const arrowDir = new THREE.Vector3(0, 0, currentSign); const arrowPos = new THREE.Vector3(0, 0, halfLength * 0.8 * currentSign);
+                     const arrowHelper = new THREE.ArrowHelper(arrowDir, arrowPos, 0.6, ARROW_COLOR, 0.25, 0.2);
+                     group.add(arrowHelper); // Add arrow to the provided group
+
+                     if (params.showFieldParticles) {
+                            const numParticlesThisLine = Math.max(1, Math.round(params.numFieldParticles / (numInsideLines + numOutsideLoops * 4 + 1)));
+                            for (let j = 0; j < numParticlesThisLine; j++) {
+                                const particle = new THREE.Mesh(fieldParticleGeo.clone(), fieldParticleMat.clone()); // Clone geo/mat
+                                const startT = Math.random();
+                                particle.position.copy(lineCurve.getPointAt(startT));
+                                group.add(particle); // Add particle to the provided group
+                                particles.push({ mesh: particle, curve: lineCurve, t: startT, speedFactor: 0.8, direction: currentSign });
+                            }
+                        }
+                }
+            }
+
+            // --- Outside Field Lines ---
+            if (params.showOutsideLines) {
+                const lineMaterial = new THREE.LineBasicMaterial({ color: FIELD_LINE_COLOR_OUTSIDE, linewidth: 1.5 });
+                for (let i = 0; i < numOutsideLoops; i++) {
+                    const loopRadius = params.radius * (1.5 + i * 0.8); const startZ = halfLength * 0.8 * currentSign; const endZ = -halfLength * 0.8 * currentSign;
+                    const curve = new THREE.CatmullRomCurve3([ new THREE.Vector3(0, 0, startZ), new THREE.Vector3(loopRadius * 0.5, 0, startZ * 0.5), new THREE.Vector3(loopRadius, 0, 0), new THREE.Vector3(loopRadius * 0.5, 0, endZ * 0.5), new THREE.Vector3(0, 0, endZ) ], false, 'catmullrom', 0.5);
+                    const points = curve.getPoints(60);
+                    // const geometry = new THREE.BufferGeometry().setFromPoints(points); // Base geometry not added directly
+
+                    const rotations = [0, Math.PI, Math.PI / 2, -Math.PI / 2];
+                    rotations.forEach(angle => {
+                        const rotationAxis = new THREE.Vector3(0, 0, 1);
+                        const rotatedCurvePoints = points.map(p => p.clone().applyAxisAngle(rotationAxis, angle));
+                        const rotatedGeometry = new THREE.BufferGeometry().setFromPoints(rotatedCurvePoints);
+                        const line = new THREE.Line(rotatedGeometry, lineMaterial);
+                        group.add(line); // Add rotated line to the provided group
+
+                        const rotatedCurve = new THREE.CatmullRomCurve3(rotatedCurvePoints, false, 'catmullrom', 0.5);
+                        const arrowIndex = Math.floor(points.length * 0.5);
+                        if(arrowIndex > 0 && arrowIndex < points.length) {
+                            const tangent = curve.getTangentAt(0.5).applyAxisAngle(rotationAxis, angle).normalize();
+                            const arrowPos = curve.getPointAt(0.5).applyAxisAngle(rotationAxis, angle);
+                            const arrowHelper = new THREE.ArrowHelper(tangent, arrowPos, 0.6, ARROW_COLOR, 0.25, 0.2);
+                            group.add(arrowHelper); // Add arrow to the provided group
+                        }
+
+                        if (params.showFieldParticles) {
+                            const numParticlesThisLine = Math.max(1, Math.round(params.numFieldParticles / (numInsideLines + numOutsideLoops * 4 + 1)));
+                            for (let j = 0; j < numParticlesThisLine; j++) {
+                                const particle = new THREE.Mesh(fieldParticleGeo.clone(), fieldParticleMat.clone()); // Clone geo/mat
+                                const startT = Math.random();
+                                particle.position.copy(rotatedCurve.getPointAt(startT));
+                                group.add(particle); // Add particle to the provided group
+                                particles.push({ mesh: particle, curve: rotatedCurve, t: startT, speedFactor: 1.2, direction: 1 });
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+
+        // --- Setup Custom HTML Controls (Same as before) ---
+        function setupCustomControls() {
+            const controlsMapping = [
+                { id: 'current', param: 'current', type: 'range', needsRebuild: true, decimals: 1 }, { id: 'numTurns', param: 'numTurns', type: 'range', needsRebuild: true, decimals: 0 }, { id: 'length', param: 'length', type: 'range', needsRebuild: true, decimals: 1 }, { id: 'radius', param: 'radius', type: 'range', needsRebuild: true, decimals: 1 },
+                { id: 'fieldLineDensity', param: 'fieldLineDensity', type: 'range', needsRebuild: true, decimals: 1 }, { id: 'showInsideLines', param: 'showInsideLines', type: 'checkbox', needsRebuild: true }, { id: 'showOutsideLines', param: 'showOutsideLines', type: 'checkbox', needsRebuild: true },
+                { id: 'particleSpeed', param: 'particleSpeed', type: 'range', needsRebuild: false, decimals: 2 }, { id: 'showWireParticles', param: 'showWireParticles', type: 'checkbox', needsRebuild: true }, { id: 'numWireParticles', param: 'numWireParticles', type: 'range', needsRebuild: true, decimals: 0 }, { id: 'showFieldParticles', param: 'showFieldParticles', type: 'checkbox', needsRebuild: true }, { id: 'numFieldParticles', param: 'numFieldParticles', type: 'range', needsRebuild: true, decimals: 0 },
+                { id: 'bloomEnabled', param: 'bloomEnabled', type: 'checkbox', needsRebuild: false }, { id: 'bloomStrength', param: 'bloomStrength', type: 'range', needsRebuild: false, decimals: 2 }, { id: 'bloomRadius', param: 'bloomRadius', type: 'range', needsRebuild: false, decimals: 2 }, { id: 'bloomThreshold', param: 'bloomThreshold', type: 'range', needsRebuild: false, decimals: 2 },
+            ];
+            controlsMapping.forEach(map => {
+                const inputElement = document.getElementById(map.id); const valueElement = document.getElementById(`${map.id}-value`);
+                if (!inputElement) { console.warn(`Control element with id "${map.id}" not found.`); return; }
+                if (map.type === 'range') { inputElement.value = params[map.param]; if (valueElement) { valueElement.textContent = parseFloat(params[map.param]).toFixed(map.decimals); } } else if (map.type === 'checkbox') { inputElement.checked = params[map.param]; }
+                inputElement.addEventListener('input', (event) => {
+                    let value; if (map.type === 'range') { value = parseFloat(event.target.value); if (valueElement) { valueElement.textContent = value.toFixed(map.decimals); } } else if (map.type === 'checkbox') { value = event.target.checked; } params[map.param] = value;
+                    if (map.needsRebuild) { updateVisualization(); } else { if (map.param === 'bloomEnabled' && bloomPass) bloomPass.enabled = value; if (map.param === 'bloomStrength' && bloomPass) bloomPass.strength = value; if (map.param === 'bloomRadius' && bloomPass) bloomPass.radius = value; if (map.param === 'bloomThreshold' && bloomPass) bloomPass.threshold = value; }
+                    if (['current', 'numTurns', 'length'].includes(map.param)) { updateMathDisplay(); }
+                });
+            });
+        }
+
+        // --- Update Functions ---
+
+        // Clear objects from a group and dispose resources
+        function clearGroup(group) {
+            while(group.children.length > 0){
+                const object = group.children[0];
+                group.remove(object); // Remove from group first
+
+                if (object.geometry) object.geometry.dispose();
+                if (object.material) {
+                    if (Array.isArray(object.material)) {
+                        object.material.forEach(m => m.dispose());
+                    } else {
+                        object.material.dispose();
+                    }
+                }
+                // Special handling for ArrowHelper children
+                if (object instanceof THREE.ArrowHelper) {
+                     if(object.line && object.line.geometry) object.line.geometry.dispose();
+                     if(object.line && object.line.material) object.line.material.dispose();
+                     if(object.cone && object.cone.geometry) object.cone.geometry.dispose();
+                     if(object.cone && object.cone.material) object.cone.material.dispose();
+                }
+                // Note: We don't remove the group itself from the scene here
+            }
+             // Clear particle tracking array associated with this group's potential contents
+             // This needs refinement if particles from both groups are mixed, but here we clear all
+             // particles when either group is cleared, which happens in createVisualization.
+             // A better approach might involve tagging particles by group.
+             // For now, clearing all particles when rebuilding is acceptable.
+             // particles.length = 0; // Moved this to createVisualization
+        }
+
+        // Create the entire visualization (clear old, create new)
+        function createVisualization() {
+            // Clear existing objects from groups
+            clearGroup(solenoidGroup);
+            clearGroup(fieldLinesGroup);
+            particles.length = 0; // Reset particle tracking array
+
+            // Create new objects and add them to the groups
+            createSolenoid(solenoidGroup);
+            createFieldLines(fieldLinesGroup);
+
+            // Update math display based on new parameters
+            updateMathDisplay();
+        }
+
+        // Function called when a parameter requiring rebuild changes
+        function updateVisualization() {
+             createVisualization();
+        }
+
+        // Update the B-field calculation display
+        function updateMathDisplay() {
+            // Ensure length is not zero to avoid division by zero
+            const length = params.length > 0 ? params.length : 1e-6; // Use a tiny number if L=0
+            const n = params.numTurns / length;
+            const B = MU_0 * n * Math.abs(params.current);
+            const bFieldElement = document.getElementById('b_field_value');
+            if (bFieldElement) {
+                bFieldElement.textContent = B > 0 ? B.toExponential(4) : '0.0000e+0';
+            }
+            const infoNote = document.querySelector('#info .note');
+            if (infoNote) {
+                infoNote.innerHTML = `Use the controls panel to change parameters.<br> Visualization is qualitative: field lines show general shape, particles indicate conventional current (${params.current >= 0 ? '+' : '-'}) direction in the wire and the resulting magnetic field direction. Electrons flow opposite to wire particles. Calculation assumes an ideal (infinitely long) solenoid.`;
+            }
+        }
+
+        // --- Window Resize (Same as before) ---
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            composer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Animation Loop (Same as before) ---
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+
+            // Animate Particles
+            particles.forEach(p => {
+                let speed = params.particleSpeed * p.speedFactor;
+                if (p.direction) { speed *= p.direction; }
+                p.t += speed * delta;
+                p.t = (p.t % 1.0 + 1.0) % 1.0; // Ensure t stays between 0 and 1
+                if (p.curve && p.curve.getPointAt) {
+                    try { // Add try-catch for safety during curve updates
+                         p.mesh.position.copy(p.curve.getPointAt(p.t));
+                    } catch (e) {
+                        // console.error("Error getting point on curve for particle:", e);
+                        // Optionally remove the problematic particle or handle error
+                    }
+                }
+            });
+
+            controls.update();
+
+            // Render using composer or renderer
+            if (params.bloomEnabled && bloomPass) {
+                 composer.render(delta);
+            } else {
+                 renderer.render(scene, camera);
+            }
+        }
+
+        // --- Start ---
+        init();
+
+    </script>
+</body>
+</html>
