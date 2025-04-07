@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fourier Analysis Visualization</title>
+    <style>
+        body { margin: 0; font-family: sans-serif; background-color: #111; color: #eee; overflow: hidden; /* Prevent scrollbars */ }
+        canvas { display: block; }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 10px;
+            border-radius: 5px;
+            color: #fff;
+            z-index: 10; /* Ensure controls are on top */
+        }
+        label { display: block; margin-bottom: 5px;}
+        input[type="range"] { width: 200px; vertical-align: middle; }
+        select { vertical-align: middle; }
+        #info {
+             position: absolute;
+             bottom: 10px;
+             left: 10px;
+             background: rgba(0,0,0,0.7);
+             padding: 10px;
+             border-radius: 5px;
+             color: #fff;
+             max-width: 350px;
+             z-index: 10;
+        }
+         a { color: #61dafb; }
+    </style>
+</head>
+<body>
+    <div id="controls">
+        <label for="termsSlider">Number of Terms (Circles): <span id="termsCount">5</span></label>
+        <input type="range" id="termsSlider" min="1" max="100" value="5" step="1">
+         <label for="speedSlider">Animation Speed: <span id="speedValue">1.0</span>x</label>
+        <input type="range" id="speedSlider" min="0.1" max="3.0" value="1.0" step="0.1">
+        <br><br>
+        <label for="signalSelect">Input Signal:</label>
+        <select id="signalSelect">
+            <option value="square">Square Wave</option>
+            <option value="sawtooth">Sawtooth Wave</option>
+            <option value="triangle">Triangle Wave</option>
+            <option value="custom">Custom (Example)</option>
+         </select>
+    </div>
+    <div id="info">
+        Use mouse/touch to rotate, zoom, and pan. <br>
+        The visualization shows how a complex periodic signal (yellow path) can be reconstructed by summing rotating vectors (epicycles). <br>
+        Each circle/vector represents a frequency component from the <a href="https://en.wikipedia.org/wiki/Fourier_series" target="_blank" rel="noopener">Fourier Series</a>. <br>
+        <b>Radius</b> = Amplitude, <b>Rotation Speed</b> = Frequency. <br>
+        The blue path is traced by the tip of the last vector. Adjust the slider to see how adding more terms improves the approximation.
+    </div>
+
+    <!-- Canvas will be added here by Three.js -->
+
+    <!-- Import map for Three.js -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.161.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.161.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <!-- Main JavaScript Logic -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- Global Variables ---
+        let scene, camera, renderer, controls;
+        let fourierComponents = []; // Stores { freq, amp, phase, re, im }
+        let circles = []; // Three.js circle objects
+        let vectors = []; // Three.js vector line objects
+        let drawingPath; // Line showing the path traced by vectors
+        let originalSignalPath; // Line showing the target signal
+        let pathPoints = []; // Points for the drawingPath geometry
+        const MAX_PATH_POINTS = 500; // Max points to keep for the traced path
+        let time = 0;
+        let animationSpeed = 1.0;
+        let numTerms = 5; // Default number of Fourier terms (circles)
+        const N_SAMPLES = 200; // Number of points to sample the input signal
+
+        // --- Input Signal Definitions ---
+        function squareWave(t) {
+            return (t % 1) < 0.5 ? 1 : -1;
+        }
+
+        function sawtoothWave(t) {
+            return (t % 1) * 2 - 1; // Ranges from -1 to 1
+        }
+
+        function triangleWave(t) {
+            const p = t % 1;
+            return p < 0.5 ? (4 * p - 1) : (-4 * p + 3); // Ranges from -1 to 1
+        }
+
+        function customSignal(t) {
+            // Example: Combine a couple of sine waves
+            const p = t % 1;
+            return Math.sin(p * Math.PI * 2) * 0.6 + Math.sin(p * Math.PI * 6) * 0.4;
+        }
+
+        let currentSignalFunction = squareWave; // Default signal
+
+        // --- Discrete Fourier Transform (DFT) ---
+        function dft(y) {
+            const X = []; // Array to hold complex coefficients { re, im }
+            const N = y.length;
+
+            for (let k = 0; k < N; k++) { // For each frequency k
+                let re = 0;
+                let im = 0;
+                for (let n = 0; n < N; n++) { // Sum over all samples n
+                    const angle = (2 * Math.PI * k * n) / N;
+                    re += y[n] * Math.cos(angle);
+                    im -= y[n] * Math.sin(angle); // Negative sign for standard DFT def
+                }
+                re /= N;
+                im /= N;
+
+                const freq = k;
+                const amp = Math.sqrt(re * re + im * im);
+                const phase = Math.atan2(im, re);
+
+                // Store frequency 0 as offset, others normally
+                // For visualization, double amplitude of non-DC/Nyquist components
+                // The Nyquist frequency is at k = N/2
+                 let vizAmp = amp;
+                 if (k !== 0 && k !== N / 2) {
+                    vizAmp *= 2;
+                 }
+
+                 // If N is odd, there's no exact Nyquist frequency component like k=N/2
+                 // If N is even, k=N/2 is the Nyquist freq.
+
+                X.push({ freq, amp: vizAmp, phase, re, im });
+            }
+            return X;
+        }
+
+        // --- Setup Functions ---
+        function setupScene() {
+            scene = new THREE.Scene();
+            const aspect = window.innerWidth / window.innerHeight;
+            // Use OrthographicCamera for a 2D-like view, easier for epicycles
+            const frustumSize = 5; // Adjust this to zoom in/out initially
+            camera = new THREE.OrthographicCamera(frustumSize * aspect / -2, frustumSize * aspect / 2, frustumSize / 2, frustumSize / -2, 0.1, 1000);
+            camera.position.z = 10;
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setClearColor(0x111111); // Dark background
+            document.body.appendChild(renderer.domElement); // Add canvas to body
+
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableRotate = true; // Allow rotation
+            controls.enablePan = true;    // Allow panning
+            controls.enableZoom = true;   // Allow zooming
+            controls.mouseButtons = {
+                LEFT: THREE.MOUSE.PAN,   // Pan with left mouse
+                MIDDLE: THREE.MOUSE.DOLLY, // Zoom with middle mouse
+                RIGHT: THREE.MOUSE.ROTATE // Rotate with right mouse
+            }
+            controls.touches = {
+                ONE: THREE.TOUCH.PAN, // Pan with one finger
+                TWO: THREE.TOUCH.DOLLY_ROTATE // Zoom/Rotate with two fingers
+            }
+            // Ensure controls update the camera projection matrix for orthographic camera zoom
+            controls.addEventListener('change', () => {
+                 // Optional: re-render immediately on control change for smoother feel
+                 // renderer.render(scene, camera);
+            });
+
+
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function onWindowResize() {
+            const aspect = window.innerWidth / window.innerHeight;
+            // Adjust frustum based on current zoom level for orthographic camera
+            const zoom = camera.zoom;
+            const baseFrustumSize = 5; // Match initial setup
+            const currentFrustumHeight = baseFrustumSize / zoom;
+            const currentFrustumWidth = currentFrustumHeight * aspect;
+
+            camera.left = -currentFrustumWidth / 2;
+            camera.right = currentFrustumWidth / 2;
+            camera.top = currentFrustumHeight / 2;
+            camera.bottom = -currentFrustumHeight / 2;
+
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function setupControls() {
+            const termsSlider = document.getElementById('termsSlider');
+            const termsCount = document.getElementById('termsCount');
+            const speedSlider = document.getElementById('speedSlider');
+            const speedValue = document.getElementById('speedValue');
+            const signalSelect = document.getElementById('signalSelect');
+
+            // Set initial values from defaults
+            termsSlider.value = numTerms;
+            termsCount.textContent = numTerms;
+            speedSlider.value = animationSpeed;
+            speedValue.textContent = animationSpeed.toFixed(1);
+
+            termsSlider.addEventListener('input', (event) => {
+                numTerms = parseInt(event.target.value);
+                termsCount.textContent = numTerms;
+                // Need to reset visuals, but keep current time and path history partially
+                resetVisualization(); // Recreate circles/vectors with new count
+            });
+
+            speedSlider.addEventListener('input', (event) => {
+                animationSpeed = parseFloat(event.target.value);
+                speedValue.textContent = animationSpeed.toFixed(1);
+            });
+
+             signalSelect.addEventListener('change', (event) => {
+                switch (event.target.value) {
+                    case 'square': currentSignalFunction = squareWave; break;
+                    case 'sawtooth': currentSignalFunction = sawtoothWave; break;
+                    case 'triangle': currentSignalFunction = triangleWave; break;
+                    case 'custom': currentSignalFunction = customSignal; break;
+                }
+                calculateFourier(); // Recalculate coefficients for the new signal
+                resetVisualization(); // Re-setup visuals
+            });
+        }
+
+        // --- Core Logic ---
+        function calculateFourier() {
+            // 1. Sample the input signal
+            const signalSamples = [];
+            for (let i = 0; i < N_SAMPLES; i++) {
+                const t = i / N_SAMPLES; // Time from 0 to 1 (exclusive of 1)
+                signalSamples.push(currentSignalFunction(t));
+            }
+
+            // 2. Perform DFT
+            let calculatedComponents = dft(signalSamples);
+
+            // 3. Sort components by frequency for consistent epicycle order
+            // The DFT output is already sorted by frequency (k=0, 1, 2...).
+            // For visualization, it's often better to sort by *amplitude* after DC.
+            const dcComponent = calculatedComponents.find(c => c.freq === 0);
+            const acComponents = calculatedComponents.filter(c => c.freq !== 0 && c.freq <= N_SAMPLES / 2); // Take up to Nyquist
+
+            // Sort AC components by amplitude descending
+            acComponents.sort((a, b) => b.amp - a.amp);
+
+            // Combine: DC first, then sorted AC components
+            fourierComponents = dcComponent ? [dcComponent, ...acComponents] : [...acComponents];
+
+             // Update slider max based on calculated components (up to Nyquist)
+            const termsSlider = document.getElementById('termsSlider');
+            // Max terms should be number of useful components (DC + AC up to Nyquist)
+            const maxTerms = Math.floor(N_SAMPLES / 2) + 1; // +1 for DC
+            termsSlider.max = maxTerms > 0 ? maxTerms : 1;
+             // Ensure current numTerms is not out of bounds
+            if (numTerms > maxTerms) {
+                numTerms = maxTerms;
+                termsSlider.value = numTerms;
+                document.getElementById('termsCount').textContent = numTerms;
+            }
+             if (numTerms < 1) {
+                 numTerms = 1;
+                 termsSlider.value = 1;
+                 document.getElementById('termsCount').textContent = 1;
+             }
+
+            console.log(`Calculated ${fourierComponents.length} components (up to Nyquist). Max terms set to ${maxTerms}.`);
+            // console.log("Fourier Components (Sorted by Amp):", fourierComponents.slice(0, 20)); // Log first few components
+        }
+
+        function createVisuals() {
+            // Clear previous objects robustly
+             if (circles && circles.length > 0) {
+                circles.forEach(c => scene.remove(c.mesh));
+            }
+            if (vectors && vectors.length > 0) {
+                vectors.forEach(v => scene.remove(v.line));
+            }
+            if (drawingPath) scene.remove(drawingPath);
+            if (originalSignalPath) scene.remove(originalSignalPath);
+
+            circles = [];
+            vectors = [];
+            // Don't reset pathPoints here if we want path to persist across term changes
+
+            // Get the components to use based on numTerms slider
+            // Use the amplitude-sorted list generated in calculateFourier
+            const componentsToUse = fourierComponents.slice(0, numTerms);
+
+            // Create circles and vectors (lines) for each component
+            componentsToUse.forEach((comp) => {
+                const amplitude = comp.amp;
+                if (amplitude < 1e-5) return; // Skip tiny components visually
+
+                // Circle outline
+                const circleGeometry = new THREE.BufferGeometry().setFromPoints(
+                     new THREE.Path().absarc(0, 0, amplitude, 0, Math.PI * 2, false).getSpacedPoints(64) // Increased points for smoother circles
+                );
+                const circleMaterial = new THREE.LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.15 });
+                const circleMesh = new THREE.Line(circleGeometry, circleMaterial);
+                circleMesh.position.z = -0.1; // Slightly behind vectors
+                circles.push({ mesh: circleMesh, component: comp });
+                scene.add(circleMesh);
+
+                // Vector (line from center to edge)
+                const vectorGeometry = new THREE.BufferGeometry().setFromPoints([
+                    new THREE.Vector3(0, 0, 0),
+                    new THREE.Vector3(amplitude, 0, 0) // Initially points along X axis
+                ]);
+                // Color vectors based on frequency? Or keep simple. Let's keep simple.
+                const vectorMaterial = new THREE.LineBasicMaterial({ color: 0x99ff99, linewidth: 1.5 }); // Lighter Green
+                const vectorLine = new THREE.Line(vectorGeometry, vectorMaterial);
+                vectors.push({ line: vectorLine, component: comp });
+                scene.add(vectorLine);
+            });
+
+            // Create/Recreate the line for tracing the path
+            const pathMaterial = new THREE.LineBasicMaterial({ color: 0x61dafb, linewidth: 2 }); // Blue trace
+            const pathGeometry = new THREE.BufferGeometry();
+            // Allocate buffer large enough for MAX_PATH_POINTS
+            pathGeometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(MAX_PATH_POINTS * 3), 3));
+            drawingPath = new THREE.Line(pathGeometry, pathMaterial);
+            drawingPath.frustumCulled = false; // Ensure path is always drawn
+            scene.add(drawingPath);
+            // Update drawing path with existing points if any
+            updateDrawingPathGeometry();
+
+
+            // Create/Recreate the line for the original signal
+            const originalSignalMaterial = new THREE.LineBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.6, linewidth: 1 }); // Yellow original
+            const originalPointsXY = [];
+            const timeScale = Math.PI * 2 * 0.8; // Scale time axis width (related to full circle)
+            const valueScale = 1.0;      // Scale value axis height
+            const xOffset = 0;          // Center the signal plot horizontally? Let's try Y vs X(time)
+            const numOriginalPoints = N_SAMPLES * 2; // Increase density for smoother curve
+
+            // Draw the signal Y value against a time axis X
+            // Map time 0..1 to X axis range, e.g., -timeScale/2 to +timeScale/2
+             const plotWidth = 4; // Arbitrary width for the plot
+            for (let i = 0; i <= numOriginalPoints; i++) {
+                const t = i / numOriginalPoints; // Time from 0 to 1
+                const x = (t - 0.5) * plotWidth ; // Map time [0,1] to [-plotWidth/2, +plotWidth/2]
+                const y = currentSignalFunction(t) * valueScale;
+                originalPointsXY.push(new THREE.Vector3(x, y, -0.2)); // Draw slightly behind everything else
+            }
+
+            const originalSignalGeometry = new THREE.BufferGeometry().setFromPoints(originalPointsXY);
+            originalSignalPath = new THREE.Line(originalSignalGeometry, originalSignalMaterial);
+            originalSignalPath.position.x = 0; // Adjust position if needed, e.g., to separate from epicycles
+            originalSignalPath.position.y = 0; // Example offset
+            originalSignalPath.frustumCulled = false;
+            scene.add(originalSignalPath);
+        }
+
+         function updateDrawingPathGeometry() {
+            if (!drawingPath || pathPoints.length === 0) return;
+
+            const pathPositions = drawingPath.geometry.attributes.position;
+            for (let i = 0; i < pathPoints.length; i++) {
+                // Fill buffer from the end backward, so newest points are at the start of the drawn range
+                const bufferIndex = MAX_PATH_POINTS - pathPoints.length + i;
+                 if (bufferIndex >= 0 && bufferIndex < MAX_PATH_POINTS) {
+                      pathPositions.setXYZ(bufferIndex, pathPoints[i].x, pathPoints[i].y, pathPoints[i].z);
+                 }
+            }
+            pathPositions.needsUpdate = true;
+            // Set draw range to only display the valid points added
+             const drawStart = Math.max(0, MAX_PATH_POINTS - pathPoints.length);
+             const drawCount = pathPoints.length;
+            drawingPath.geometry.setDrawRange(drawStart, drawCount);
+            // console.log(`Updating path geometry. Points: ${pathPoints.length}. Draw range: ${drawStart} to ${drawStart + drawCount}`);
+        }
+
+
+        function resetVisualization() {
+            // Clear previous THREE objects, keep path history and time
+            createVisuals();
+        }
+
+        // --- Animation Loop ---
+        let lastTime = 0;
+        function animate(timestamp) {
+            requestAnimationFrame(animate);
+
+            const deltaTime = (timestamp - lastTime) * 0.001; // Time delta in seconds
+            lastTime = timestamp;
+
+            // Avoid large jumps if tab was inactive
+            if (deltaTime > 0.1) return;
+
+            time += deltaTime * animationSpeed;
+
+            // Determine the starting point (DC offset)
+            let currentCenter = new THREE.Vector3(0, 0, 0);
+             // The DC component (freq=0) represents the average value (offset).
+             // Our DFT calculates re=avg, im=0 for real signals.
+             // We need to extract this offset *before* processing rotating vectors.
+             const dcComp = fourierComponents.find(c => c.freq === 0);
+             let startPoint = new THREE.Vector3(0, 0, 0);
+             if (dcComp && numTerms > 0) {
+                // Use the actual calculated DC offset (re, im) from DFT, not the vizAmp
+                startPoint.set(dcComp.re, dcComp.im, 0);
+             }
+
+             // Make the epicycles draw relative to this start point
+             currentCenter.copy(startPoint);
+
+
+            // Get the components to use based on numTerms slider
+            const componentsToUse = fourierComponents.slice(0, numTerms);
+
+            // Ensure visuals match components (safeguard)
+            if (circles.length !== vectors.length || vectors.length !== componentsToUse.filter(c => c.amp > 1e-5).length) {
+                 if(componentsToUse.length > 0) { // Only reset if expecting visuals
+                     console.warn("Visuals count mismatch, resetting.");
+                     resetVisualization(); // This might cause a visual flicker
+                 }
+                 return; // Skip frame render until reset is done
+            }
+
+
+            let visualIndex = 0; // Index for circles/vectors arrays
+            componentsToUse.forEach((comp) => {
+                if (comp.amp < 1e-5) return; // Skip rendering tiny components
+
+                const circle = circles[visualIndex];
+                const vector = vectors[visualIndex];
+                const amplitude = comp.amp; // Use visualization amplitude
+                const frequency = comp.freq;
+                const phase = comp.phase;
+
+                 // Update circle position to the end of the previous vector
+                 circle.mesh.position.copy(currentCenter);
+
+                 // Calculate the angle for rotation
+                 // DFT gives components for exp(-j*2*pi*k*n/N)
+                 // We visualize sum of C_k * exp(j*2*pi*k*t) where C_k = amp*exp(j*phase)
+                 // Angle = frequency * time_scaled + phase
+                 const angle = frequency * (time * Math.PI * 2) + phase; // time cycles 0..1..2..
+
+                 // Update vector position and rotation
+                 vector.line.position.copy(currentCenter);
+                 vector.line.rotation.z = angle;
+
+                 // Calculate the endpoint of this vector (contribution to the sum)
+                 const endX = currentCenter.x + amplitude * Math.cos(angle);
+                 const endY = currentCenter.y + amplitude * Math.sin(angle);
+
+                 // This endpoint becomes the center for the next circle/vector
+                 currentCenter.set(endX, endY, 0);
+
+                visualIndex++; // Move to next circle/vector pair
+            });
+
+            // The final 'currentCenter' is the point tracing the waveform
+            const finalPoint = currentCenter.clone();
+
+            // Update the drawing path history (add to end)
+            pathPoints.push(finalPoint);
+            if (pathPoints.length > MAX_PATH_POINTS) {
+                pathPoints.shift(); // Remove the oldest point from the beginning
+            }
+
+            // Update the drawing path geometry buffer
+            updateDrawingPathGeometry();
+
+
+            // Keep controls updated (target might change if DC offset added/removed)
+             // Center camera view target on the DC offset (start point) for better orbiting
+            if (!controls.target.equals(startPoint)) {
+                controls.target.copy(startPoint);
+            }
+            controls.update(); // Apply target change and handle user input
+
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Initialization ---
+        function init() {
+            setupScene();
+            setupControls();    // Setup listeners and initial values
+            calculateFourier(); // Initial calculation based on default signal
+            createVisuals();    // Initial creation of THREE objects
+            resetVisualization(); // Ensure visuals match calculated data
+            lastTime = performance.now(); // Initialize lastTime for animate loop
+            animate(lastTime);     // Start the animation loop
+        }
+
+        init(); // Run everything!
+
+    </script>
+</body>
+</html>
